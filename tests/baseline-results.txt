@@ -1,0 +1,10 @@
+Original sketch baseline, before the Timer1/VR fix (2026-10-15).
+Compiler: MSVC 14.51.36231, x64 host; actual .ino included by regression.cpp.
+
+VR full-scale after 150 ms: 3000 RPM (required >= 12600)
+FAIL vr_response: VR response is slower than the 150 ms target
+500 RPM with 20800 us TM1637 blocking: 5 rises; worst period error 10804.000 us
+FAIL display_500: display transfer delayed or lost output edges
+14000 RPM with 20800 us TM1637 blocking: 101 rises; worst period error 19990.286 us
+FAIL display_14000: display transfer delayed or lost output edges
+0/3 cases passed

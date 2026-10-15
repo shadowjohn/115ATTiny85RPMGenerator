@@ -1,0 +1,41 @@
+Fixed x10 RPM default host regression output (2026-10-15).
+Compiler: MSVC 14.51.36231, x64 host, C++17 /O2 /W4.
+Actual adjacent .ino included by regression.cpp; deterministic 4 us Timer1 model.
+Sketch SHA256: 1DE33D44802C8D6C2FD9E3A23E3C0F75B16C75E8E57954E58401375009EEC095
+
+Default-unit regression first failed with divisor 1: 500 RPM displayed 500, expected 50.
+
+VR 0 -> full-scale: observed 13500 RPM after 50000 us (90% target <=150000 us)
+PASS vr_response
+Filter 0 -> 1023 after four samples: 959 (required >= 921)
+PASS filter_response
+500 RPM with 20800 us TM1637 blocking: 5 rises; worst period error 0.000 us
+PASS display_500
+14000 RPM with 20800 us TM1637 blocking: 105 rises; worst period error 1.714 us
+PASS display_14000
+28 steps 500..14000 RPM: worst period/high/low errors 1.714 / 2.609 / 2.000 us
+PASS all_steps
+0 RPM and negative RPM stay LOW; restart begins with a complete 10000 us LOW
+PASS stop_restart
+Repeated same-RPM calls: 35 continuous rising edges
+PASS same_rpm
+500 -> 14000 RPM update during HIGH preserves old cycle and applies a complete new pair
+PASS boundary_high
+500 -> 14000 RPM update during LOW preserves old cycle and applies a complete new pair
+PASS boundary_low
+14000 -> 500 RPM update during HIGH preserves old cycle and applies a complete new pair
+PASS boundary_down
+VR sweep stays monotonic in RPM and pulse periods (worst increase 0.000 us); both endpoints reachable
+PASS vr_monotonic
+29 reachable thresholds: +/-3 ADC noise holds either selected step
+PASS hysteresis
+32-bit millis wrap: VR continues sampling and 14000 RPM timing remains valid
+PASS millis_wrap
+Timer1 GPIO, normal mode, CK/64, TOP and PLL/Timer0 preservation checks passed
+PASS timer_config
+Fixed x10 RPM display: 0->0, 500->50, 9500->950, 10000->1000, 10500->1050, 14000->1400; output RPM preserved
+PASS display_range
+15/15 cases passed
+
+The host compile emits C4244 narrowing warnings for AVR-sized values; see README.
+No target AVR build result or physical receiver acceptance is implied here.
