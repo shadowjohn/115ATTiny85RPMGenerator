@@ -17,6 +17,7 @@ namespace sim {
 struct Edge { uint64_t at; bool high; };
 uint64_t nowUs = 0;
 int adc = 0;
+bool buttonGrounded = false;
 unsigned displayBlockUs = 20800;
 unsigned displayTransfers = 0;
 int displayedNumber = -1;
@@ -79,10 +80,18 @@ void rememberSegments(const uint8_t segments[], uint8_t length, uint8_t position
 
 void pinMode(uint8_t pin, uint8_t mode) {
   if (mode == OUTPUT) sim::ddrb |= uint8_t(_BV(pin));
-  else sim::ddrb &= uint8_t(~_BV(pin));
+  else {
+    sim::ddrb &= uint8_t(~_BV(pin));
+    if (mode == INPUT_PULLUP) PORTB |= uint8_t(_BV(pin));
+    else PORTB &= uint8_t(~_BV(pin));
+  }
 }
 void digitalWrite(uint8_t pin, uint8_t value) {
   if (value) PORTB |= uint8_t(_BV(pin)); else PORTB &= uint8_t(~_BV(pin));
+}
+int digitalRead(uint8_t pin) {
+  if (pin == PB0 && sim::buttonGrounded) return LOW;
+  return (uint8_t(PORTB) & _BV(pin)) ? HIGH : LOW;
 }
 int analogRead(uint8_t) { sim::advance(104); return sim::adc; }
 unsigned long micros() { return static_cast<uint32_t>(sim::nowUs); }
@@ -90,7 +99,13 @@ unsigned long millis() { return static_cast<uint32_t>(sim::nowUs / 1000); }
 void delay(unsigned long milliseconds) { sim::advance(uint64_t(milliseconds) * 1000); }
 void delayMicroseconds(unsigned int microseconds) { sim::advance(microseconds); }
 
-#include "../115ATTiny85RPMGenerator.ino"
+#if defined(HOST_SKETCH_V3)
+#include "../V3/115ATTiny85RPMGenerator/115ATTiny85RPMGenerator.ino"
+#elif defined(HOST_SKETCH_V1)
+#include "../V1/115ATTiny85RPMGenerator/115ATTiny85RPMGenerator.ino"
+#else
+#include "../V2/115ATTiny85RPMGenerator/115ATTiny85RPMGenerator.ino"
+#endif
 
 static void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
@@ -382,6 +397,175 @@ static void millisWrap() {
   std::printf("32-bit millis wrap: VR continues sampling and 14000 RPM timing remains valid\n");
 }
 
+
+// These fixtures use only setup(), loop(), PB0 input and requested/output RPM.
+// Times are independent requirements, not read from the implementation constants.
+static void initializeManualFull() {
+  sim::adc = 1023;
+  setup();
+  foregroundFor(200000);
+  require(rpm == 14000, "startup must retain manual VR mode");
+}
+static void driveButton(bool grounded, uint64_t durationUs, bool suppressDisplay = false) {
+  sim::buttonGrounded = grounded;
+  foregroundFor(durationUs, false, suppressDisplay);
+}
+static uint64_t waitForRPM(int expected, unsigned timeoutMs) {
+  const uint64_t start = sim::nowUs;
+  while (rpm != expected && sim::nowUs - start < uint64_t(timeoutMs) * 1000) foregroundFor(1000);
+  if (rpm != expected) {
+    std::printf("  expected %d RPM; observed %d after %u ms\n", expected, rpm, timeoutMs);
+    throw std::runtime_error("automatic RPM transition missing");
+  }
+  return sim::nowUs;
+}
+static uint64_t enterAutomatic() {
+  sim::buttonGrounded = true;
+  const uint64_t entered = waitForRPM(0, 120);
+  driveButton(false, 50000);
+  return entered;
+}
+static void requireDwell(uint64_t start, uint64_t end, unsigned expectedMs) {
+  const uint64_t actual = end - start;
+  if (actual + 3000 < uint64_t(expectedMs) * 1000 || actual > uint64_t(expectedMs) * 1000 + 35000) {
+    std::printf("  dwell %llu us; expected %u ms (foreground allowance -3/+35 ms)\n",
+                static_cast<unsigned long long>(actual), expectedMs);
+    throw std::runtime_error("automatic step dwell outside requirement");
+  }
+}
+static void buttonDebounce() {
+  initializeManualFull();
+  require(!(DDRB & _BV(PB0)), "PB0 must be an input");
+  require(uint8_t(PORTB) & _BV(PB0), "PB0 internal pull-up must be enabled");
+  driveButton(true, 5000, true);
+  driveButton(false, 5000, true);
+  driveButton(true, 5000, true);
+  driveButton(false, 5000, true);
+  driveButton(true, 29000, true);
+  require(rpm == 14000, "bounce or a <30 ms press changed mode");
+  foregroundFor(10000, false, true);
+  require(rpm == 0, "stable LOW did not enter automatic mode");
+  foregroundFor(500000, false, true);
+  require(rpm == 0, "held button toggled mode more than once");
+  driveButton(false, 12000, true);
+  driveButton(true, 45000, true);
+  require(rpm == 0, "release bounce armed a second press");
+  driveButton(false, 40000, true);
+  driveButton(true, 40000, true);
+  require(rpm == 14000, "second debounced press did not restore manual VR");
+  driveButton(false, 40000, true);
+  driveButton(true, 40000, true);
+  require(rpm == 0, "re-entering automatic mode did not restart at zero");
+  std::printf("PB0 pull-up, 30 ms debounce, press/release bounce, held press and mode re-entry passed\n");
+}
+static void buttonBootHeld() {
+  sim::buttonGrounded = true;
+  initializeManualFull();
+  foregroundFor(500000);
+  require(rpm == 14000, "button held at boot must not automatically start the sweep");
+  driveButton(false, 50000);
+  driveButton(true, 50000);
+  require(rpm == 0, "release and fresh press after boot did not activate sweep");
+  std::printf("Button held during boot stays manual until a released/new press\n");
+}
+static void automaticCycle() {
+  initializeManualFull();
+  uint64_t transition = enterAutomatic();
+  sim::edges.clear();
+  foregroundFor(1500000);
+  require(rpm == 0 && sim::edges.empty() && !(uint8_t(PORTB) & _BV(PB4)),
+          "initial zero dwell must stop PB4 even while VR remains full-scale");
+  uint64_t next = waitForRPM(14000, 700);
+  requireDwell(transition, next, 2000);
+  transition = next;
+  // Full descending and ascending fixtures, including another turn at the top.
+  const int expected[] = {13000,12000,11000,10000,9000,8000,7000,6000,5000,4000,3000,2000,1000,0,
+                          1000,2000,3000,4000,5000,6000,7000,8000,9000,10000,11000,12000,13000,14000,13000};
+  int previous = 14000;
+  for (int target : expected) {
+    const unsigned dwellMs = (previous == 0 || previous == 14000) ? 2000 : 1000;
+    foregroundFor(100000);
+    require(rpm == previous, "automatic step did not hold its requested RPM");
+    require(sim::displayedNumber == previous / 10 && !sim::usedSegments,
+            "automatic display must show the active RPM in fixed x10 units");
+    sim::edges.clear();
+    foregroundFor(350000);
+    if (previous == 0) {
+      require(sim::edges.empty() && !(uint8_t(PORTB) & _BV(PB4)), "zero endpoint generated output edges");
+    } else {
+      const auto rises = risingEdges();
+      require(rises.size() >= 3, "automatic plateau missing PB4 pulses");
+      for (size_t i = 1; i < rises.size(); ++i)
+        closeTo(double(rises[i] - rises[i - 1]), 60000000.0 / previous, "automatic plateau has wrong pulse period");
+    }
+    next = waitForRPM(target, dwellMs);
+    requireDwell(transition, next, dwellMs);
+    transition = next;
+    previous = target;
+    sim::adc = previous == 0 ? 1023 : 0; // VR must not override the sweep in either direction.
+  }
+  std::printf("Automatic 0->14000, 13000..0, 1000..14000 and repeat: 1 s steps/2 s ends, display and PB4 passed\n");
+}
+static void automaticReturnVR() {
+  initializeManualFull();
+  enterAutomatic();
+  waitForRPM(14000, 2100);
+  sim::adc = 0;
+  foregroundFor(200000);
+  require(rpm == 14000, "VR overrode an automatic plateau");
+  // Return must use the VR sampled during automatic mode, not stale pre-sweep full scale.
+  driveButton(true, 50000);
+  require(rpm == 0 && !(uint8_t(PORTB) & _BV(PB4)), "return to manual did not promptly apply current zero VR");
+  driveButton(false, 50000);
+  sim::adc = 1023;
+  foregroundFor(150000);
+  require(rpm == 14000, "manual VR did not resume after leaving automatic mode");
+  driveButton(true, 50000);
+  require(rpm == 0, "second automatic entry resumed old phase instead of zero");
+  driveButton(false, 50000);
+  foregroundFor(1500000);
+  require(rpm == 0, "re-entered automatic mode did not restart the initial zero hold");
+  waitForRPM(14000, 700);
+  std::printf("VR remains sampled during sweep; second press returns current VR; re-entry restarts at zero\n");
+}
+static void automaticMillisWrap() {
+  // Place a debounced press across millis() rollover (Windows unsigned long is 32 bits).
+  sim::nowUs = uint64_t(UINT32_MAX - 240) * 1000;
+  initializeManualFull();
+  sim::buttonGrounded = true;
+  const uint64_t entered = waitForRPM(0, 120);
+  driveButton(false, 50000);
+  require(millis() < 1000, "debounced activation did not cross 32-bit millis rollover");
+  const uint64_t high = waitForRPM(14000, 2100);
+  requireDwell(entered, high, 2000);
+  const uint64_t down = waitForRPM(13000, 2100);
+  requireDwell(high, down, 2000);
+  driveButton(true, 50000);
+  require(rpm == 14000, "button could not return to manual after millis rollover");
+  std::printf("Debounce and automatic dwell/steps continue across 32-bit millis rollover\n");
+}
+
+
+static void automaticDwellWrap() {
+  // Unlike the press-wrap fixture, the initial two-second hold begins before wrap.
+  sim::nowUs = uint64_t(UINT32_MAX - 1300) * 1000;
+  initializeManualFull();
+  const uint64_t entered = enterAutomatic();
+  require(millis() > UINT32_MAX - 2000, "zero hold must begin before millis rollover");
+  sim::edges.clear();
+  foregroundFor(1500000);
+  require(millis() < 1000, "zero hold did not cross millis rollover");
+  require(rpm == 0 && sim::edges.empty() && !(uint8_t(PORTB) & _BV(PB4)),
+          "zero endpoint ended early or produced edges at millis rollover");
+  const uint64_t high = waitForRPM(14000, 700);
+  requireDwell(entered, high, 2000);
+  const uint64_t down = waitForRPM(13000, 2100);
+  requireDwell(high, down, 2000);
+  driveButton(true, 50000);
+  require(rpm == 14000, "return to manual failed after a hold crossed millis rollover");
+  std::printf("Initial 2 s zero hold crosses millis rollover without ending early; later steps/manual remain valid\n");
+}
+
 int main(int argc, char** argv) {
   if (argc != 2) { std::fprintf(stderr, "Pass one test name.\n"); return 2; }
   const std::string test = argv[1];
@@ -401,6 +585,12 @@ int main(int argc, char** argv) {
     else if (test == "millis_wrap") millisWrap();
     else if (test == "timer_config") timerConfiguration();
     else if (test == "display_range") displayRange();
+    else if (test == "button_debounce") buttonDebounce();
+    else if (test == "button_boot_held") buttonBootHeld();
+    else if (test == "auto_cycle") automaticCycle();
+    else if (test == "auto_return_vr") automaticReturnVR();
+    else if (test == "auto_millis_wrap") automaticMillisWrap();
+    else if (test == "auto_dwell_wrap") automaticDwellWrap();
     else throw std::runtime_error("unknown test");
     std::printf("PASS %s\n", test.c_str());
     return 0;

@@ -41,3 +41,23 @@
 重跑 host 測試：在專案執行 `powershell -ExecutionPolicy Bypass -File tests/run.ps1`（需要本機 MSVC）。重跑 firmware 編譯：在任務工作區執行 `./build.ps1 -SketchPath 'D:\mytools\115ATTiny85RPMGenerator'`。32-bit AVR 工具在受限沙箱會有 DLL 載入錯誤，本次在核准的擴大執行環境完成純編譯。
 
 未 commit、未 push、未燒錄、未更動 fuse／核心全域設定。尚未接示波器或實體儀表驗收；實機測項請依 README 執行。B0505S 已由使用者回報可驅動，但全轉速範圍仍待確認。使用者已同意全範圍固定 ×10 RPM，預設除數為 10，面板單位應標示「×10 RPM」。
+
+## V2 按鈕與自動爬格子（2026-10-26）
+
+工作目錄為 `D:\GD\arduino\115ATTiny85RPMGenerator`；修改 `V2/115ATTiny85RPMGenerator/115ATTiny85RPMGenerator.ino`，保留 V1 來源。既有工作區已有 V1／V2 與電路圖整理異動，本次未 stage 或 commit。
+
+PB0 使用內部上拉，按鈕接地，按下／放開穩定 30 ms 後才更新按鍵狀態，長按僅觸發一次；開機按住會先等待放開。自動模式先 0 停 2 秒，再到 14000 停 2 秒，之後每格 1000 RPM、停 1 秒往返，0／14000 端點各停 2 秒。再按切回持續取樣的 VR 濾波讀值，下次進入自動模式從 0 重新開始。Timer1 ISR 與脈波參數計算維持原樣。
+
+測試先對未修改 V2 執行五項新功能案例，正確得到 0/5 失敗，見 `tests/button-red-results.txt`。修改後再補上端點停留跨溢位案例，最終 `& .\tests\run.ps1` 全部 **21/21 通過**，完整輸出見 `tests/button-green-results.txt`。覆蓋原有 15 項波形／VR／顯示回歸，以及按鈕防彈跳、開機按住、完整升降循環、切回 VR、防彈跳跨 millis 溢位、2 秒端點停留跨溢位。`& .\tests\run.ps1 -Version V1` 的原 15 項亦全數通過。MSVC 保留原有 AVR／host 整數寬度轉型警告，最終 AVR sketch 編譯無警告。
+
+本機純 AVR 編譯使用既有 Arduino Builder、damellis attiny 1.0.2、Arduino AVR **1.8.8**、AVR GCC 7.3.0-atmel3.6.1-arduino7、TM1637 1.2.0；FQBN 同前為 `attiny:avr:ATtinyX5:cpu=attiny85,clock=internal16`。新版 Flash **3088 / 8192 bytes**、SRAM **136 / 512 bytes**（基準為 2602 / 121 bytes）。最終來源 SHA256：`192aeb2b16917a721e20044f59dc8269764abe4221d51452f6bdbc3598625c1c`。
+
+純編譯輸出留在 `C:\Users\stw_s\AppData\Local\Temp\codex-attiny85-v2-20261026`：`final-compile.log`、`final-build/115ATTiny85RPMGenerator.ino.hex` 與 `.elf`。最終編譯重用同次基準建立的核心快取；基準只有既有核心 WInterrupts.c、new.cpp、Tone.cpp 警告。未下載或安裝新依賴、未燒錄、未更動 fuse。上述 host 測試仍受前述理想排程模型限制，實體按鈕、PB4 與儀表需在接線燒錄後驗收。
+
+## V3 三模式驗證（2026-11-01）
+
+新增 V3，V1/V2 sketch 保持不變。模式順序：1 原 500 RPM 手動階梯、2 平順 VR、3 自動爬格子。每次切換顯示模式數字 800 ms，再恢復固定 ×10 RPM。平順模式 ADC 0～8 為零、1015～1023 為 14000，中段線性取整；Timer1 計數改為 32-bit，涵蓋低速長週期。從低於 500 快轉到 500 RPM 以上時重啟週期，以免等待數秒的舊脈波。
+
+Linux `python3 tests/run_v3.py` **16/16 通過**；V1 原套件 **15/15**、V2 原套件 **21/21** 通過。測試覆蓋模式切換、按鈕彈跳／長按／開機按住、VR 線性與端點、低速波形、快速拉轉、完整自動循環、millis 溢位與原有週期交界等。此為理想時鐘主機模擬，不代表實體脈波誤差。
+
+Arduino CLI 純編譯成功：`attiny:avr:ATtinyX5:cpu=attiny85,clock=internal16`，damellis attiny 1.0.2、Arduino AVR 1.8.6、AVR GCC 7.3.0-atmel3.6.1-arduino7、TM1637 1.2.0。Flash **3576/8192 bytes**，靜態 SRAM **153/512 bytes**。工具鏈與編譯產物位於 `/home/john/.local/state/3wa_ride/rpm-v3-20261101/`，未燒錄、未改 fuse、未做內部振盪器校正。Windows PowerShell 的 V3 選項已補上，這次未在 Windows 執行。

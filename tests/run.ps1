@@ -1,16 +1,31 @@
-param([string[]] $Cases = @('vr_response', 'filter_response', 'display_500', 'display_14000',
-  'all_steps', 'stop_restart', 'same_rpm', 'boundary_high', 'boundary_low', 'boundary_down',
-  'vr_monotonic', 'hysteresis', 'millis_wrap', 'timer_config', 'display_range'))
+param(
+  [ValidateSet('V1', 'V2', 'V3')] [string] $Version = 'V2',
+  [string[]] $Cases
+)
+if (!$PSBoundParameters.ContainsKey('Cases')) {
+  $Cases = @('vr_response', 'filter_response', 'display_500', 'display_14000',
+    'all_steps', 'stop_restart', 'same_rpm', 'boundary_high', 'boundary_low', 'boundary_down',
+    'vr_monotonic', 'hysteresis', 'millis_wrap', 'timer_config', 'display_range')
+  if ($Version -eq 'V3') {
+    $Cases = @('modes', 'mapping', 'low_14', 'low_50', 'accelerate', 'auto', 'wrap', 'boot_held',
+      'timer_config', 'all_steps', 'same_rpm', 'boundary_high', 'boundary_low', 'boundary_down', 'stop_restart', 'hysteresis')
+  }
+  if ($Version -eq 'V2') {
+    $Cases += @('button_debounce', 'button_boot_held', 'auto_cycle', 'auto_return_vr', 'auto_millis_wrap', 'auto_dwell_wrap')
+  }
+}
 $ErrorActionPreference = 'Stop'
 $testRoot = $PSScriptRoot
 $source = Join-Path $testRoot 'regression.cpp'
-$sketch = Join-Path (Split-Path $testRoot) '115ATTiny85RPMGenerator.ino'
-$buildRoot = Join-Path $testRoot 'build'
+if ($Version -eq 'V3') { $source = Join-Path $testRoot 'v3_regression.cpp' }
+$sketch = Join-Path (Split-Path $testRoot) "$Version\115ATTiny85RPMGenerator\115ATTiny85RPMGenerator.ino"
+$buildRoot = Join-Path $testRoot "build\$Version"
 New-Item -ItemType Directory -Force -Path $buildRoot | Out-Null
 $vcvars = 'C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat'
 $compiler = 'C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231\bin\Hostx64\x64\cl.exe'
 if (!(Test-Path -LiteralPath $compiler)) { throw "MSVC compiler not found: $compiler" }
 $defines = '/DF_CPU=16000000UL /D__AVR_ATtiny85__=1'
+if ($Version -eq 'V1') { $defines += ' /DHOST_SKETCH_V1=1' }
 if ((Get-Content -LiteralPath $sketch -Raw) -match 'ISR\s*\(\s*TIMER1_COMPA_vect') { $defines += ' /DHOST_HAS_TIMER1_ISR=1' }
 if ((Get-Content -LiteralPath $sketch -Raw) -match '\bselectVRStep\s*\(') { $defines += ' /DHOST_HAS_SELECT_VR_STEP=1' }
 $batchFile = Join-Path $buildRoot 'compile.cmd'

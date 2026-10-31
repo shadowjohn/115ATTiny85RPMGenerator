@@ -1,0 +1,16 @@
+2026-10-26: V2 feature RED before firmware changes
+Command: & .\tests\run.ps1 -Cases @('button_debounce','button_boot_held','auto_cycle','auto_return_vr','auto_millis_wrap')
+Actual V2 sketch compiled successfully; existing MSVC AVR/host narrowing warnings remain.
+FAIL button_debounce: PB0 internal pull-up must be enabled
+FAIL button_boot_held: release and fresh press after boot did not activate sweep
+  expected 0 RPM; observed 14000 after 120 ms
+FAIL auto_cycle: automatic RPM transition missing
+  expected 0 RPM; observed 14000 after 120 ms
+FAIL auto_return_vr: automatic RPM transition missing
+  expected 0 RPM; observed 14000 after 120 ms
+FAIL auto_millis_wrap: automatic RPM transition missing
+0/5 cases passed
+Exit code 1
+
+Control: & .\tests\run.ps1 -Version V1
+15/15 original cases passed, exit code 0.

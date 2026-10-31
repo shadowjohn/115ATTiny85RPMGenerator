@@ -1,0 +1,49 @@
+regression.cpp
+D:\GD\arduino\115ATTiny85RPMGenerator\tests\../V2/115ATTiny85RPMGenerator/115ATTiny85RPMGenerator.ino(129): warning C4244: '正在初始化': 將 'int' 轉換為 'int16_t'，由於類型不同，可能導致資料遺失
+D:\GD\arduino\115ATTiny85RPMGenerator\tests\../V2/115ATTiny85RPMGenerator/115ATTiny85RPMGenerator.ino(129): warning C4244: '正在初始化': 將 'int' 轉換為 'const int16_t'，由於類型不同，可能導致資料遺失
+D:\GD\arduino\115ATTiny85RPMGenerator\tests\../V2/115ATTiny85RPMGenerator/115ATTiny85RPMGenerator.ino(143): warning C4244: '=': 將 'uint32_t' 轉換為 'uint8_t'，由於類型不同，可能導致資料遺失
+D:\GD\arduino\115ATTiny85RPMGenerator\tests\../V2/115ATTiny85RPMGenerator/115ATTiny85RPMGenerator.ino(185): warning C4244: '正在初始化': 將 'unsigned long' 轉換為 'uint16_t'，由於類型不同，可能導致資料遺失
+D:\GD\arduino\115ATTiny85RPMGenerator\tests\../V2/115ATTiny85RPMGenerator/115ATTiny85RPMGenerator.ino(185): warning C4244: '正在初始化': 將 'unsigned long' 轉換為 'const uint16_t'，由於類型不同，可能導致資料遺失
+VR 0 -> full-scale: observed 13500 RPM after 50000 us (90% target <=150000 us)
+PASS vr_response
+Filter 0 -> 1023 after four samples: 959 (required >= 921)
+PASS filter_response
+500 RPM with 20800 us TM1637 blocking: 5 rises; worst period error 0.000 us
+PASS display_500
+14000 RPM with 20800 us TM1637 blocking: 105 rises; worst period error 1.714 us
+PASS display_14000
+28 steps 500..14000 RPM: worst period/high/low errors 1.714 / 2.609 / 2.000 us
+PASS all_steps
+0 RPM and negative RPM stay LOW; restart begins with a complete 10000 us LOW
+PASS stop_restart
+Repeated same-RPM calls: 35 continuous rising edges
+PASS same_rpm
+500 -> 14000 RPM update during HIGH preserves old cycle and applies a complete new pair
+PASS boundary_high
+500 -> 14000 RPM update during LOW preserves old cycle and applies a complete new pair
+PASS boundary_low
+14000 -> 500 RPM update during HIGH preserves old cycle and applies a complete new pair
+PASS boundary_down
+VR sweep stays monotonic in RPM and pulse periods (worst increase 0.000 us); both endpoints reachable
+PASS vr_monotonic
+29 reachable thresholds: +/-3 ADC noise holds either selected step
+PASS hysteresis
+32-bit millis wrap: VR continues sampling and 14000 RPM timing remains valid
+PASS millis_wrap
+Timer1 GPIO, normal mode, CK/64, TOP and PLL/Timer0 preservation checks passed
+PASS timer_config
+Fixed x10 RPM display: 0->0, 500->50, 9500->950, 10000->1000, 10500->1050, 14000->1400; output RPM preserved
+PASS display_range
+PB0 pull-up, 30 ms debounce, press/release bounce, held press and mode re-entry passed
+PASS button_debounce
+Button held during boot stays manual until a released/new press
+PASS button_boot_held
+Automatic 0->14000, 13000..0, 1000..14000 and repeat: 1 s steps/2 s ends, display and PB4 passed
+PASS auto_cycle
+VR remains sampled during sweep; second press returns current VR; re-entry restarts at zero
+PASS auto_return_vr
+Debounce and automatic dwell/steps continue across 32-bit millis rollover
+PASS auto_millis_wrap
+Initial 2 s zero hold crosses millis rollover without ending early; later steps/manual remain valid
+PASS auto_dwell_wrap
+21/21 cases passed

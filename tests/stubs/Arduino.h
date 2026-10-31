@@ -7,6 +7,7 @@
 #define HIGH 1
 #define INPUT 0
 #define OUTPUT 1
+#define INPUT_PULLUP 2
 #define PB0 0
 #define PB1 1
 #define PB2 2
@@ -21,6 +22,7 @@ typedef bool boolean;
 
 void pinMode(uint8_t pin, uint8_t mode);
 void digitalWrite(uint8_t pin, uint8_t value);
+int digitalRead(uint8_t pin);
 int analogRead(uint8_t pin);
 unsigned long micros();
 unsigned long millis();
