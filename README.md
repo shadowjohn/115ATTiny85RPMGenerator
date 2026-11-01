@@ -3,6 +3,9 @@
 此版本針對 VR 反應慢，以及轉動 VR、更新 TM1637 時接收端轉速先下降的問題修正。
 
 `V1/115ATTiny85RPMGenerator/` 保留可變電阻控制版本；`V2/115ATTiny85RPMGenerator/` 增加 PB0 按鈕切換自動爬格子。Arduino IDE 請開啟對應資料夾內的同名 `.ino`。
+## 電路圖
+<img src="電路圖/V2-V3/電路圖V2_V3_2596.png">
+
 
 ## 板子與接線
 
